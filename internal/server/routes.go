@@ -6,23 +6,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (s *Server) RegisterRoutes() http.Handler {
+func (srv *Server) RegisterRoutes() http.Handler {
 	r := gin.Default()
 
-	r.GET("/", s.HelloWorldHandler)
-
-	r.GET("/health", s.healthHandler)
+	r.GET("/", srv.HelloWorldHandler)
+	r.GET("/health", srv.healthHandler)
+	r.POST("/start-crawl", srv.StartCrawlHandler)
 
 	return r
 }
 
-func (s *Server) HelloWorldHandler(c *gin.Context) {
-	resp := make(map[string]string)
-	resp["message"] = "Hello World"
-
+func (srv *Server) HelloWorldHandler(c *gin.Context) {
+	resp := map[string]string{"message": "Hello World"}
 	c.JSON(http.StatusOK, resp)
 }
 
-func (s *Server) healthHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, s.db.Health())
+func (srv *Server) healthHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, srv.db.Health())
+}
+
+func (srv *Server) StartCrawlHandler(c *gin.Context) {
+	// Implementar a lógica para iniciar o crawler TypeScript
+	// Pode ser feita uma chamada HTTP para o serviço em TypeScript
 }

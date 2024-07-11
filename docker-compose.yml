@@ -1,16 +1,20 @@
 version: '3.8'
 
 services:
-  psql:
-    image: postgres:latest
-    environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+  go_api:
+    build:
+      context: .
+      dockerfile: Dockerfile.go
     ports:
-      - "${DB_PORT}:5432"
-    volumes:
-      - psql_volume:/var/lib/postgresql/data
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    depends_on:
+      - typescript_crawler
 
-volumes:
-  psql_volume:
+  typescript_crawler:
+    build:
+      context: ./typescript_crawler
+      dockerfile: Dockerfile.ts
+    ports:
+      - "3000:3000"

@@ -29,15 +29,25 @@ type service struct {
 }
 
 var (
-	database   = os.Getenv("DB_DATABASE")
-	password   = os.Getenv("DB_PASSWORD")
-	username   = os.Getenv("DB_USERNAME")
-	port       = os.Getenv("DB_PORT")
-	host       = os.Getenv("DB_HOST")
-	schema     = os.Getenv("DB_SCHEMA")
+	database   = getEnv("DB_DATABASE", "defaultdb")
+	password   = getEnv("DB_PASSWORD", "defaultpass")
+	username   = getEnv("DB_USERNAME", "defaultuser")
+	port       = getEnv("DB_PORT", "5432")
+	host       = getEnv("DB_HOST", "localhost")
+	schema     = getEnv("DB_SCHEMA", "public")
 	dbInstance *service
 )
 
+// getEnv gets the value of the environment variable or returns the default value if not set.
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+// New creates a new database service instance.
 func New() Service {
 	// Reuse Connection
 	if dbInstance != nil {
@@ -67,7 +77,7 @@ func (s *service) Health() map[string]string {
 	if err != nil {
 		stats["status"] = "down"
 		stats["error"] = fmt.Sprintf("db down: %v", err)
-		log.Fatalf(fmt.Sprintf("db down: %v", err)) // Log the error and terminate the program
+		log.Printf("db down: %v", err) // Log the error but do not terminate the program
 		return stats
 	}
 
