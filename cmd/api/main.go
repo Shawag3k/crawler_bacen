@@ -2,13 +2,14 @@ package main
 
 import (
 	"crawler_bacen/internal/server"
-	"log"
+	"fmt"
 )
 
 func main() {
-	srv := server.NewServer()
-	err := srv.ListenAndServe()
+	httpServer := server.NewServer()
+
+	err := httpServer.ListenAndServe()
 	if err != nil {
-		log.Fatalf("cannot start server: %s", err)
+		panic(fmt.Sprintf("cannot start server: %s", err))
 	}
 }

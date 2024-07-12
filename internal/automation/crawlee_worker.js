@@ -1,36 +1,57 @@
-import { PuppeteerCrawler, Dataset } from 'crawlee';
-import puppeteer from 'puppeteer';
+import { PlaywrightCrawler } from 'crawlee';
 
-const startUrls = ['URL_DO_FORMULARIO_DE_BUSCA'];
+const crawler = new PlaywrightCrawler({
+    requestHandler: async ({ page, request }) => {
+        const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData;
 
-const crawler = new PuppeteerCrawler({
-    async requestHandler({ page, request, enqueueLinks }) {
-        console.log(`Processing ${request.url}...`);
+        // Navegar até a página com o formulário
+        await page.goto('URL_DO_FORMULARIO_DO_BCB');
 
-        if (request.url === 'URL_DO_FORMULARIO_DE_BUSCA') {
-            // Preenche o formulário
-            await page.type('SELETOR_DO_CAMPO_DE_BUSCA', 'TERMO_DE_BUSCA');
-            await page.click('SELETOR_DO_BOTAO_DE_BUSCA');
-            await page.waitForNavigation();
+        // Preencher os campos do formulário
+        if (tipoDocumento) await page.selectOption('#tipoDocumento', tipoDocumento);
+        if (numero) await page.fill('#numero', numero);
+        if (conteudo) await page.fill('#conteudo', conteudo);
+        if (dataInicioBusca) await page.fill('#dataInicioBusca', dataInicioBusca);
+        if (dataFimBusca) await page.fill('#dataFimBusca', dataFimBusca);
 
-            // Coleta links dos resultados
-            const links = await page.$$eval('SELETOR_DOS_LINKS_DOS_RESULTADOS', elements =>
-                elements.map(element => element.href)
-            );
+        // Verificar se os campos foram preenchidos corretamente
+        const tipoDocumentoValue = await page.$eval('#tipoDocumento', el => el.value);
+        const numeroValue = await page.$eval('#numero', el => el.value);
+        const conteudoValue = await page.$eval('#conteudo', el => el.value);
+        const dataInicioBuscaValue = await page.$eval('#dataInicioBusca', el => el.value);
+        const dataFimBuscaValue = await page.$eval('#dataFimBusca', el => el.value);
 
-            // Enfileira links para processamento
-            await enqueueLinks({ urls: links });
+        const formStatus = {
+            tipoDocumento: tipoDocumentoValue === tipoDocumento,
+            numero: numeroValue === numero,
+            conteudo: conteudoValue === conteudo,
+            dataInicioBusca: dataInicioBuscaValue === dataInicioBusca,
+            dataFimBusca: dataFimBuscaValue === dataFimBusca,
+        };
+
+        console.log('Form Status:', formStatus);
+
+        // Submeter o formulário se todos os campos estiverem corretos
+        if (Object.values(formStatus).every(status => status)) {
+            await page.click('button.btn-primary');
         } else {
-            // Acessa cada link e copia o conteúdo importante
-            const content = await page.$eval('SELETOR_DO_CONTEUDO_IMPORTANTE', el => el.innerText);
-
-            // Salva o conteúdo no Dataset
-            await Dataset.pushData({ url: request.url, content });
+            console.error('Form filling error:', formStatus);
         }
-    },
-    async failedRequestHandler({ request }) {
-        console.log(`Request ${request.url} failed too many times.`);
+
+        // Coletar os resultados (se o formulário foi submetido corretamente)
+        const results = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('.result-item')).map(item => item.href);
+        });
+
+        console.log(results);
     },
 });
 
-await crawler.run(startUrls);
+const startCrawler = async (data) => {
+    await crawler.run([{
+        url: 'URL_DO_FORMULARIO_DO_BCB',
+        userData: data 
+    }]);
+};
+
+export default startCrawler;
