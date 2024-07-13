@@ -15,11 +15,11 @@ const crawler = new PlaywrightCrawler({
         if (dataFimBusca) await page.fill('#dataFimBusca', dataFimBusca);
 
         // Verificar se os campos foram preenchidos corretamente
-        const tipoDocumentoValue = await page.$eval('#tipoDocumento', el => (el as HTMLSelectElement).value);
-        const numeroValue = await page.$eval('#numero', el => (el as HTMLInputElement).value);
-        const conteudoValue = await page.$eval('#conteudo', el => (el as HTMLInputElement).value);
-        const dataInicioBuscaValue = await page.$eval('#dataInicioBusca', el => (el as HTMLInputElement).value);
-        const dataFimBuscaValue = await page.$eval('#dataFimBusca', el => (el as HTMLInputElement).value);
+        const tipoDocumentoValue = await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value);
+        const numeroValue = await page.$eval('#numero', (el: HTMLInputElement) => el.value);
+        const conteudoValue = await page.$eval('#conteudo', (el: HTMLInputElement) => el.value);
+        const dataInicioBuscaValue = await page.$eval('#dataInicioBusca', (el: HTMLInputElement) => el.value);
+        const dataFimBuscaValue = await page.$eval('#dataFimBusca', (el: HTMLInputElement) => el.value);
 
         const formStatus = {
             tipoDocumento: tipoDocumentoValue === tipoDocumento,
