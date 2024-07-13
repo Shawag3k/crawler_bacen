@@ -14,7 +14,7 @@ services:
 
   typescript_crawler:
     build:
-      context: ./typescript_crawler
+      context: ./internal/automation
       dockerfile: Dockerfile.ts
     ports:
       - "3000:3000"
