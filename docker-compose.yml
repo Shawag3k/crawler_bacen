@@ -10,9 +10,9 @@ services:
     environment:
       - PORT=8080
     depends_on:
-      - typescript_crawler
+      - crawlee_service
 
-  typescript_crawler:
+  crawlee_service:
     build:
       context: ./internal/automation
       dockerfile: Dockerfile.ts

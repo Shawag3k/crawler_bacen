@@ -1,15 +1,16 @@
 {
   "name": "typescript-crawler",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "crawlee_worker.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/crawlee_worker.js"
   },
   "dependencies": {
-    "crawlee": "^3.11.0"  
+    "crawlee": "^3.11.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.3" 
+    "tsc": "^2.0.4",
+    "typescript": "^5.5.3"
   }
 }

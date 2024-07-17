@@ -1,6 +1,7 @@
 import { PlaywrightCrawler } from 'crawlee';
 
 const crawler = new PlaywrightCrawler({
+    headless: true,
     requestHandler: async ({ page, request }) => {
         const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData;
 
@@ -38,9 +39,12 @@ const crawler = new PlaywrightCrawler({
             console.error('Form filling error:', formStatus);
         }
 
-        // Coletar os resultados (se o formulário foi submetido corretamente)
+        // Esperar os resultados carregarem
+        await page.waitForSelector('a[href*="exibenormativo"]');
+
+        // Coletar os resultados
         const results = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('.result-item')).map(item => (item as HTMLAnchorElement).href);
+            return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
         });
 
         console.log(results);

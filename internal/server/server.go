@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -66,9 +67,16 @@ func (s *Server) StartCrawlHandler(c *gin.Context) {
 		return
 	}
 
+	// Convert requestData to JSON string
+	requestDataJSON, err := json.Marshal(requestData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Criar o comando para executar o Crawlee
-	cmd := exec.Command("node", "internal/automation/crawlee_worker.js")
-	cmd.Env = append(os.Environ(), fmt.Sprintf("CRAWL_DATA=%s", requestData))
+	cmd := exec.Command("node", "internal/automation/src/crawlee_worker.js")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("CRAWL_DATA=%s", requestDataJSON))
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -76,5 +84,11 @@ func (s *Server) StartCrawlHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"output": string(output)})
+	var links []string
+	if err := json.Unmarshal(output, &links); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse output", "output": string(output)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"links": links})
 }
