@@ -12,6 +12,9 @@ RUN npm install
 # Copy the rest of the application code
 COPY . .
 
+# Compile TypeScript application
+RUN npx tsc
+
 # Expose the port that the application will run on
 EXPOSE 3000
 

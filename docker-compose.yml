@@ -1,3 +1,4 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
@@ -10,9 +11,9 @@ services:
     environment:
       - PORT=8080
     depends_on:
-      - crawlee_service
+      - typescript_crawler
 
-  crawlee_service:
+  typescript_crawler:
     build:
       context: ./internal/automation
       dockerfile: Dockerfile.ts
