@@ -1,9 +1,18 @@
 import { PlaywrightCrawler } from 'crawlee';
 
+interface CrawlData {
+    tipoDocumento?: string;
+    numero?: string;
+    conteudo?: string;
+    dataInicioBusca?: string;
+    dataFimBusca?: string;
+    results?: string[];
+}
+
 const crawler = new PlaywrightCrawler({
     headless: true,
     requestHandler: async ({ page, request }) => {
-        const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData;
+        const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData as CrawlData;
 
         // Navegar até a página com o formulário
         await page.goto('https://www.bcb.gov.br/estabilidadefinanceira/buscanormas');
@@ -48,14 +57,21 @@ const crawler = new PlaywrightCrawler({
         });
 
         console.log(results);
+
+        // Adicionar resultados aos dados do usuário para retornar ao índice
+        (request.userData as CrawlData).results = results;  
     },
 });
 
-const startCrawler = async (data: { tipoDocumento?: string, numero?: string, conteudo?: string, dataInicioBusca?: string, dataFimBusca?: string }) => {
-    await crawler.run([{
+const startCrawler = async (data: CrawlData) => {
+    const requestData = [{
         url: 'https://www.bcb.gov.br/estabilidadefinanceira/buscanormas',
         userData: data 
-    }]);
+    }];
+
+    await crawler.run(requestData);
+
+    return requestData[0].userData.results;  // Retornar resultados
 };
 
 export default startCrawler;
