@@ -1,11 +1,12 @@
-// main.go
-
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"os/exec"
+	"os"
 )
 
 func main() {
@@ -13,16 +14,47 @@ func main() {
 		fmt.Fprintf(w, "Server is up and running!")
 	})
 
-	http.HandleFunc("/crawl", func(w http.ResponseWriter, r *http.Request) {
-		cmd := exec.Command("curl", "http://typescript_crawler:3000/start_crawl")
-		_, err := cmd.CombinedOutput()
+	http.HandleFunc("/start-crawl", func(w http.ResponseWriter, r *http.Request) {
+		var requestData map[string]string
+		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to start crawling: %v", err), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		if err := json.Unmarshal(body, &requestData); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		fmt.Fprintf(w, "Crawling process started successfully!")
+		requestDataJSON, err := json.Marshal(requestData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		resp, err := http.Post("http://typescript_crawler:3000/start-crawl", "application/json", bytes.NewBuffer(requestDataJSON))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(respBody)
 	})
 
-	http.ListenAndServe(":8080", nil)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	http.ListenAndServe(":"+port, nil)
 }

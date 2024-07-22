@@ -26,3 +26,4 @@ app.post('/start-crawl', async (req: Request, res: Response) => {
 app.listen(port, () => {
     console.log(`TypeScript crawler listening at http://localhost:${port}`);
 });
+

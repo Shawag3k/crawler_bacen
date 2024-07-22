@@ -1,22 +1,26 @@
-FROM node:20-alpine
+# Use uma imagem oficial do Node.js como imagem base
+FROM node:20
 
-# Configure the working directory
+# Configure o diretório de trabalho dentro do container
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package.json package-lock.json ./
+# Copie o arquivo package.json e package-lock.json para o diretório de trabalho
+COPY package*.json ./
 
-# Install dependencies
+# Instale as dependências do projeto
 RUN npm install
 
-# Copy the rest of the application code
+# Adicione a instalação dos navegadores do Playwright
+RUN npx playwright install --with-deps
+
+# Copie o restante do código-fonte da aplicação para o diretório de trabalho
 COPY . .
 
-# Compile TypeScript application
-RUN npx tsc
+# Compile o código TypeScript para JavaScript
+RUN npm run build
 
-# Expose the port that the application will run on
+# Exponha a porta em que o aplicativo vai rodar
 EXPOSE 3000
 
-# Command to run the application
-CMD ["node", "./build/index.js"]
+# Comando para rodar a aplicação
+CMD ["node", "build/index.js"]
