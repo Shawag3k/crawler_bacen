@@ -16,6 +16,7 @@ const crawler = new PlaywrightCrawler({
 
         // Navegar até a página com o formulário
         await page.goto('https://www.bcb.gov.br/estabilidadefinanceira/buscanormas');
+        console.log('Página carregada');
 
         // Preencher os campos do formulário
         if (tipoDocumento) await page.selectOption('#tipoDocumento', tipoDocumento);
@@ -23,6 +24,7 @@ const crawler = new PlaywrightCrawler({
         if (conteudo) await page.fill('#conteudo', conteudo);
         if (dataInicioBusca) await page.fill('#dataInicioBusca', dataInicioBusca);
         if (dataFimBusca) await page.fill('#dataFimBusca', dataFimBusca);
+        console.log('Campos do formulário preenchidos');
 
         // Verificar se os campos foram preenchidos corretamente
         const tipoDocumentoValue = await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value);
@@ -44,19 +46,27 @@ const crawler = new PlaywrightCrawler({
         // Submeter o formulário se todos os campos estiverem corretos
         if (Object.values(formStatus).every(status => status)) {
             await page.click('button.btn-primary');
+            console.log('Formulário submetido');
         } else {
-            console.error('Form filling error:', formStatus);
+            console.error('Erro ao preencher o formulário:', formStatus);
+            return;
         }
 
         // Esperar os resultados carregarem
-        await page.waitForSelector('a[href*="exibenormativo"]');
+        try {
+            await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 10000 });
+            console.log('Resultados encontrados');
+        } catch (error) {
+            console.error('Erro ao carregar resultados:', error);
+            return;
+        }
 
         // Coletar os resultados
         const results = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
         });
 
-        console.log(results);
+        console.log('Resultados coletados:', results);
 
         // Adicionar resultados aos dados do usuário para retornar ao índice
         (request.userData as CrawlData).results = results;  
