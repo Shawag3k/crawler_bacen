@@ -1,6 +1,6 @@
 import { PlaywrightCrawler } from 'crawlee';
-import { mkdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import fs from 'fs';
+import path from 'path';
 
 interface CrawlData {
     tipoDocumento?: string;
@@ -28,7 +28,6 @@ const crawler = new PlaywrightCrawler({
         if (dataFimBusca) await page.fill('#dataFimBusca', dataFimBusca);
         console.log('Campos do formulário preenchidos');
 
-        // Verificar se os campos foram preenchidos corretamente
         const formStatus = {
             tipoDocumento: (await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value)) === tipoDocumento,
             numero: (await page.$eval('#numero', (el: HTMLInputElement) => el.value)) === numero,
@@ -55,30 +54,36 @@ const crawler = new PlaywrightCrawler({
             return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
         });
 
+        // Criar diretório para PDFs se não existir
+        const pdfDir = path.resolve(__dirname, 'pdf_normas');
+        if (!fs.existsSync(pdfDir)) {
+            fs.mkdirSync(pdfDir, { recursive: true });
+        }
+
+        for (const result of results) {
+            await page.goto(result);
+            const content = await page.$eval('exibenormativo', (el: HTMLElement) => el.innerHTML);
+            const pdfName = `norma_${path.basename(result)}.pdf`;
+            const savePath = path.join(pdfDir, pdfName);
+
+            try {
+                await page.pdf({ path: savePath, format: 'A4' });
+                console.log(`PDF salvo em: ${savePath}`);
+
+                // Verifica se o arquivo foi realmente criado
+                if (fs.existsSync(savePath)) {
+                    console.log(`Confirmação: PDF salvo com sucesso em ${savePath}`);
+                } else {
+                    console.error(`Erro: PDF não encontrado após tentativa de salvamento em ${savePath}`);
+                }
+            } catch (error) {
+                console.error(`Erro ao salvar PDF em ${savePath}:`, error);
+            }
+        }
+
         // Salva os resultados no requestData
         (request.userData as CrawlData).results = results;
-
-        // Criação de PDFs a partir dos links de normativos
-        if (!existsSync('pdf_normas')) {
-            mkdirSync('pdf_normas');
-        }
-
-        for (const link of results) {
-            await page.goto(link);
-
-            // Selecionar o conteúdo do elemento <exibenormativo>
-            const content = await page.$eval('exibenormativo', (el: HTMLElement) => el.innerHTML);
-
-
-            const normNumberMatch = link.match(/numero=(\d+)/);
-            const normNumber = normNumberMatch ? normNumberMatch[1] : 'unknown';
-            const pdfPath = join('pdf_normas', `norma_${normNumber}.pdf`);
-
-            await page.setContent(content);
-            await page.pdf({ path: pdfPath, format: 'A4' });
-            console.log(`PDF salvo em: ${pdfPath}`);
-        }
-    }
+    },
 });
 
 const startCrawler = async (data: CrawlData) => {
@@ -89,8 +94,9 @@ const startCrawler = async (data: CrawlData) => {
 
     await crawler.run(requestData);
 
+    // Saída JSON limpa dos resultados
     const resultsJson = JSON.stringify(requestData[0].userData.results);
-    console.log(resultsJson);
+    console.log(resultsJson); // Certifique-se de que este seja o único output final
     return requestData[0].userData.results;
 };
 

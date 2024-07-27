@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 func main() {
@@ -47,8 +48,32 @@ func main() {
 			return
 		}
 
+		var responseMap map[string]interface{}
+		if err := json.Unmarshal(respBody, &responseMap); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Verificando e corrigindo o campo "pdfs_gerados"
+		var savedFiles []string
+		if pdfs, ok := responseMap["pdfs_gerados"].([]interface{}); ok {
+			for _, pdf := range pdfs {
+				if pdfName, ok := pdf.(string); ok {
+					savedFiles = append(savedFiles, filepath.Base(pdfName))
+				}
+			}
+		}
+
+		responseMap["pdfs_gerados"] = savedFiles
+
+		// Respondendo ao cliente com os detalhes dos arquivos PDF
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(respBody)
+		responseJSON, err := json.Marshal(responseMap)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write(responseJSON)
 	})
 
 	port := os.Getenv("PORT")
