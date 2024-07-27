@@ -16,14 +16,13 @@ app.post('/start-crawl', async (req: Request, res: Response) => {
             dataInicioBusca,
             dataFimBusca
         });
-        res.status(200).json({ links: results });
+        res.status(200).json({ message: 'PDFs gerados com sucesso!', links: results });
     } catch (error) {
         console.error(error);
-        res.status(500).send('Error starting the crawling process');
+        res.status(500).send('Erro ao iniciar o processo de crawling');
     }
 });
 
 app.listen(port, () => {
-    console.log(`TypeScript crawler listening at http://localhost:${port}`);
+    console.log(`TypeScript crawler ouvindo em http://localhost:${port}`);
 });
-

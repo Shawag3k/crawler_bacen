@@ -66,12 +66,11 @@ func (s *Server) StartCrawlHandler(c *gin.Context) {
 		return
 	}
 
-	// Chamar o crawler
 	results, err := worker.RunCrawler(requestData)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"links": results})
+	c.String(http.StatusOK, results)
 }

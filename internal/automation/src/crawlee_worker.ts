@@ -1,4 +1,6 @@
 import { PlaywrightCrawler } from 'crawlee';
+import { mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 
 interface CrawlData {
     tipoDocumento?: string;
@@ -27,61 +29,69 @@ const crawler = new PlaywrightCrawler({
         console.log('Campos do formulário preenchidos');
 
         // Verificar se os campos foram preenchidos corretamente
-        const tipoDocumentoValue = await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value);
-        const numeroValue = await page.$eval('#numero', (el: HTMLInputElement) => el.value);
-        const conteudoValue = await page.$eval('#conteudo', (el: HTMLInputElement) => el.value);
-        const dataInicioBuscaValue = await page.$eval('#dataInicioBusca', (el: HTMLInputElement) => el.value);
-        const dataFimBuscaValue = await page.$eval('#dataFimBusca', (el: HTMLInputElement) => el.value);
-
         const formStatus = {
-            tipoDocumento: tipoDocumentoValue === tipoDocumento,
-            numero: numeroValue === numero,
-            conteudo: conteudoValue === conteudo,
-            dataInicioBusca: dataInicioBuscaValue === dataInicioBusca,
-            dataFimBusca: dataFimBuscaValue === dataFimBusca,
+            tipoDocumento: (await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value)) === tipoDocumento,
+            numero: (await page.$eval('#numero', (el: HTMLInputElement) => el.value)) === numero,
+            conteudo: (await page.$eval('#conteudo', (el: HTMLInputElement) => el.value)) === conteudo,
+            dataInicioBusca: (await page.$eval('#dataInicioBusca', (el: HTMLInputElement) => el.value)) === dataInicioBusca,
+            dataFimBusca: (await page.$eval('#dataFimBusca', (el: HTMLInputElement) => el.value)) === dataFimBusca,
         };
 
-        console.log('Form Status:', formStatus);
-
-        // Submeter o formulário se todos os campos estiverem corretos
         if (Object.values(formStatus).every(status => status)) {
             await page.click('button.btn-primary');
-            console.log('Formulário submetido');
         } else {
             console.error('Erro ao preencher o formulário:', formStatus);
             return;
         }
 
-        // Esperar os resultados carregarem
         try {
             await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 10000 });
-            console.log('Resultados encontrados');
         } catch (error) {
             console.error('Erro ao carregar resultados:', error);
             return;
         }
 
-        // Coletar os resultados
         const results = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
         });
 
-        console.log('Resultados coletados:', results);
+        // Salva os resultados no requestData
+        (request.userData as CrawlData).results = results;
 
-        // Adicionar resultados aos dados do usuário para retornar ao índice
-        (request.userData as CrawlData).results = results;  
-    },
+        // Criação de PDFs a partir dos links de normativos
+        if (!existsSync('pdf_normas')) {
+            mkdirSync('pdf_normas');
+        }
+
+        for (const link of results) {
+            await page.goto(link);
+
+            // Selecionar o conteúdo do elemento <exibenormativo>
+            const content = await page.$eval('exibenormativo', (el: HTMLElement) => el.innerHTML);
+
+
+            const normNumberMatch = link.match(/numero=(\d+)/);
+            const normNumber = normNumberMatch ? normNumberMatch[1] : 'unknown';
+            const pdfPath = join('pdf_normas', `norma_${normNumber}.pdf`);
+
+            await page.setContent(content);
+            await page.pdf({ path: pdfPath, format: 'A4' });
+            console.log(`PDF salvo em: ${pdfPath}`);
+        }
+    }
 });
 
 const startCrawler = async (data: CrawlData) => {
     const requestData = [{
         url: 'https://www.bcb.gov.br/estabilidadefinanceira/buscanormas',
-        userData: data 
+        userData: data
     }];
 
     await crawler.run(requestData);
 
-    return requestData[0].userData.results;  // Retornar resultados
+    const resultsJson = JSON.stringify(requestData[0].userData.results);
+    console.log(resultsJson);
+    return requestData[0].userData.results;
 };
 
 export default startCrawler;
