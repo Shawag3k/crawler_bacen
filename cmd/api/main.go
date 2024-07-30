@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,27 +17,35 @@ func main() {
 	})
 
 	http.HandleFunc("/start-crawl", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Recebendo solicitação para iniciar o crawling...")
+
 		var requestData map[string]string
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
+			log.Println("Erro ao ler o corpo da solicitação:", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		defer r.Body.Close()
 
 		if err := json.Unmarshal(body, &requestData); err != nil {
+			log.Println("Erro ao deserializar JSON:", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		log.Println("Dados recebidos para o crawling:", requestData)
+
 		requestDataJSON, err := json.Marshal(requestData)
 		if err != nil {
+			log.Println("Erro ao serializar dados de solicitação para JSON:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		resp, err := http.Post("http://typescript_crawler:3000/start-crawl", "application/json", bytes.NewBuffer(requestDataJSON))
 		if err != nil {
+			log.Println("Erro ao enviar solicitação ao crawler:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -44,17 +53,22 @@ func main() {
 
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
+			log.Println("Erro ao ler resposta do crawler:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		log.Println("Resposta recebida do crawler:", string(respBody))
 
 		var responseMap map[string]interface{}
 		if err := json.Unmarshal(respBody, &responseMap); err != nil {
+			log.Println("Erro ao deserializar resposta do crawler:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Verificando e corrigindo o campo "pdfs_gerados"
+		log.Println("Resposta deserializada do crawler:", responseMap)
+
 		var savedFiles []string
 		if pdfs, ok := responseMap["pdfs_gerados"].([]interface{}); ok {
 			for _, pdf := range pdfs {
@@ -65,11 +79,12 @@ func main() {
 		}
 
 		responseMap["pdfs_gerados"] = savedFiles
+		log.Println("Arquivos PDF gerados:", savedFiles)
 
-		// Respondendo ao cliente com os detalhes dos arquivos PDF
 		w.Header().Set("Content-Type", "application/json")
 		responseJSON, err := json.Marshal(responseMap)
 		if err != nil {
+			log.Println("Erro ao serializar resposta para JSON:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -81,5 +96,6 @@ func main() {
 		port = "8080"
 	}
 
+	log.Println("Iniciando o servidor na porta", port)
 	http.ListenAndServe(":"+port, nil)
 }

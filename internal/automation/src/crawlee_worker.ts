@@ -16,17 +16,30 @@ const crawler = new PlaywrightCrawler({
     requestHandler: async ({ page, request }) => {
         const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData as CrawlData;
 
-        // Navegar até a página com o formulário
         await page.goto('https://www.bcb.gov.br/estabilidadefinanceira/buscanormas');
         console.log('Página carregada');
 
         // Preencher os campos do formulário
-        if (tipoDocumento) await page.selectOption('#tipoDocumento', tipoDocumento);
-        if (numero) await page.fill('#numero', numero);
-        if (conteudo) await page.fill('#conteudo', conteudo);
-        if (dataInicioBusca) await page.fill('#dataInicioBusca', dataInicioBusca);
-        if (dataFimBusca) await page.fill('#dataFimBusca', dataFimBusca);
-        console.log('Campos do formulário preenchidos');
+        if (tipoDocumento) {
+            await page.selectOption('#tipoDocumento', tipoDocumento);
+            console.log(`Campo 'tipoDocumento' preenchido com: ${tipoDocumento}`);
+        }
+        if (numero) {
+            await page.fill('#numero', numero);
+            console.log(`Campo 'numero' preenchido com: ${numero}`);
+        }
+        if (conteudo) {
+            await page.fill('#conteudo', conteudo);
+            console.log(`Campo 'conteudo' preenchido com: ${conteudo}`);
+        }
+        if (dataInicioBusca) {
+            await page.fill('#dataInicioBusca', dataInicioBusca);
+            console.log(`Campo 'dataInicioBusca' preenchido com: ${dataInicioBusca}`);
+        }
+        if (dataFimBusca) {
+            await page.fill('#dataFimBusca', dataFimBusca);
+            console.log(`Campo 'dataFimBusca' preenchido com: ${dataFimBusca}`);
+        }
 
         const formStatus = {
             tipoDocumento: (await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value)) === tipoDocumento,
@@ -35,6 +48,8 @@ const crawler = new PlaywrightCrawler({
             dataInicioBusca: (await page.$eval('#dataInicioBusca', (el: HTMLInputElement) => el.value)) === dataInicioBusca,
             dataFimBusca: (await page.$eval('#dataFimBusca', (el: HTMLInputElement) => el.value)) === dataFimBusca,
         };
+
+        console.log('\n Status de preenchimento do formulário:', formStatus);
 
         if (Object.values(formStatus).every(status => status)) {
             await page.click('button.btn-primary');
@@ -45,6 +60,7 @@ const crawler = new PlaywrightCrawler({
 
         try {
             await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 10000 });
+            console.log('Resultados da busca carregados');
         } catch (error) {
             console.error('Erro ao carregar resultados:', error);
             return;
@@ -53,20 +69,43 @@ const crawler = new PlaywrightCrawler({
         const results = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
         });
+        console.log('Links coletados:', results);
 
         // Criar diretório para PDFs se não existir
         const pdfDir = path.resolve(__dirname, 'pdf_normas');
         if (!fs.existsSync(pdfDir)) {
             fs.mkdirSync(pdfDir, { recursive: true });
+            console.log('Diretório pdf_normas criado');
         }
 
         for (const result of results) {
             await page.goto(result);
-            const content = await page.$eval('exibenormativo', (el: HTMLElement) => el.innerHTML);
+            console.log(`Navegando para o link: ${result}`);
+
+            // Extrair o título e o conteúdo do texto
+            await page.waitForSelector('h2.titulo-pagina.cormorant');
+            const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
+            const content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
+
+
+
+
+            // HTML para logo e conteúdo
+            const logoHtml = `<div style="text-align: center;">
+                                <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
+                              </div>`;
+            const fullContentHtml = `
+                ${logoHtml}
+                <h2 style="text-align: center;">${title}</h2>
+                <div>${content}</div>
+            `;
+
             const pdfName = `norma_${path.basename(result)}.pdf`;
             const savePath = path.join(pdfDir, pdfName);
 
             try {
+                // Definir o conteúdo HTML completo na página e gerar o PDF
+                await page.setContent(fullContentHtml);
                 await page.pdf({ path: savePath, format: 'A4' });
                 console.log(`PDF salvo em: ${savePath}`);
 
@@ -83,10 +122,12 @@ const crawler = new PlaywrightCrawler({
 
         // Salva os resultados no requestData
         (request.userData as CrawlData).results = results;
+        console.log('Resultados salvos em requestData');
     },
 });
 
 const startCrawler = async (data: CrawlData) => {
+    console.log('Iniciando o crawler com os dados:', data);
     const requestData = [{
         url: 'https://www.bcb.gov.br/estabilidadefinanceira/buscanormas',
         userData: data
@@ -96,7 +137,7 @@ const startCrawler = async (data: CrawlData) => {
 
     // Saída JSON limpa dos resultados
     const resultsJson = JSON.stringify(requestData[0].userData.results);
-    console.log(resultsJson); // Certifique-se de que este seja o único output final
+    console.log('Resultados JSON:', resultsJson); // Certifique-se de que este seja o único output final
     return requestData[0].userData.results;
 };
 
