@@ -13,7 +13,7 @@ interface CrawlData {
 
 const crawler = new PlaywrightCrawler({
     headless: true,
-    requestHandler: async ({ page, request }) => {
+    requestHandler: async ({ page, request, enqueueLinks, log }) => {
         const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData as CrawlData;
 
         await page.goto('https://www.bcb.gov.br/estabilidadefinanceira/buscanormas');
@@ -58,18 +58,43 @@ const crawler = new PlaywrightCrawler({
             return;
         }
 
-        try {
-            await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 10000 });
-            console.log('Resultados da busca carregados');
-        } catch (error) {
-            console.error('Erro ao carregar resultados:', error);
-            return;
-        }
+        let results: string[] = [];
+        let pageIndex = 1;
 
-        const results = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
-        });
-        console.log('Links coletados:', results);
+        do {
+            try {
+                await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 15000 });
+                console.log(`Resultados da página ${pageIndex} carregados`);
+            } catch (error) {
+                console.error('Erro ao carregar resultados:', error);
+                return;
+            }
+
+            const pageResults = await page.evaluate(() => {
+                return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
+            });
+            results = results.concat(pageResults);
+            console.log(`Links coletados na página ${pageIndex}:`, pageResults);
+
+            // Verificar e clicar no botão de próxima página
+            const nextPageExists = await page.evaluate(() => {
+                const nextButton = document.querySelector('li.page-item:not(.disabled) a[aria-label="Próximo"]');
+                if (nextButton) {
+                    (nextButton as HTMLAnchorElement).click();
+                    return true;
+                }
+                return false;
+            });
+
+            if (nextPageExists) {
+                console.log(`Navegando para a próxima página: ${pageIndex + 1}`);
+                await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+                pageIndex++;
+            } else {
+                console.log('Nenhuma página adicional encontrada ou fim dos resultados alcançado.');
+                break;
+            }
+        } while (true);
 
         // Criar diretório para PDFs se não existir
         const pdfDir = path.resolve(__dirname, 'pdf_normas');
@@ -79,47 +104,59 @@ const crawler = new PlaywrightCrawler({
         }
 
         for (const result of results) {
-            await page.goto(result);
-            console.log(`Navegando para o link: ${result}`);
-
-            // Extrair o título e o conteúdo do texto
-            await page.waitForSelector('h2.titulo-pagina.cormorant');
-            const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
-            const content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
-
-
-
-
-            // HTML para logo e conteúdo
-            const logoHtml = `<div style="text-align: center;">
-                                <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
-                              </div>`;
-            const fullContentHtml = `
-                ${logoHtml}
-                <h2 style="text-align: center;">${title}</h2>
-                <div>${content}</div>
-            `;
-
-            const pdfName = `norma_${path.basename(result)}.pdf`;
-            const savePath = path.join(pdfDir, pdfName);
-
             try {
-                // Definir o conteúdo HTML completo na página e gerar o PDF
-                await page.setContent(fullContentHtml);
-                await page.pdf({ path: savePath, format: 'A4' });
-                console.log(`PDF salvo em: ${savePath}`);
+                await page.goto(result);
+        console.log(`Navegando para o link: ${result}`);
 
-                // Verifica se o arquivo foi realmente criado
-                if (fs.existsSync(savePath)) {
-                    console.log(`Confirmação: PDF salvo com sucesso em ${savePath}`);
-                } else {
-                    console.error(`Erro: PDF não encontrado após tentativa de salvamento em ${savePath}`);
-                }
-            } catch (error) {
-                console.error(`Erro ao salvar PDF em ${savePath}:`, error);
-            }
+        // Aguarde 4 segundos para garantir que a página carregue completamente
+        await (4000);
+
+        // Extrair o título e o conteúdo do texto
+        await page.waitForSelector('h2.titulo-pagina.cormorant');
+        const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
+
+        let content;
+        try {
+            // Primeiro tenta encontrar o elemento com id conteudoTexto
+            content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
+        } catch {
+            // Se não encontrar, tenta com a classe WordSection1
+            await page.waitForSelector('div.WordSection1');
+            content = await page.$eval('div.WordSection1', (el: HTMLElement) => el.innerHTML);
         }
 
+        // HTML para logo e conteúdo
+        const logoHtml = `<div style="text-align: center;">
+                            <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
+                          </div>`;
+        const fullContentHtml = `
+            ${logoHtml}
+            <h2 style="text-align: center;">${title}</h2>
+            <div>${content}</div>
+        `;
+
+        const pdfName = `norma_${path.basename(result)}.pdf`;
+        const savePath = path.join(pdfDir, pdfName);
+
+        try {
+            // Definir o conteúdo HTML completo na página e gerar o PDF
+            await page.setContent(fullContentHtml);
+            await page.pdf({ path: savePath, format: 'A4' });
+            console.log(`PDF salvo em: ${savePath}`);
+
+            // Verifica se o arquivo foi realmente criado
+            if (fs.existsSync(savePath)) {
+                console.log(`Confirmação: PDF salvo com sucesso em ${savePath}`);
+            } else {
+                console.error(`Erro: PDF não encontrado após tentativa de salvamento em ${savePath}`);
+            }
+        } catch (error) {
+            console.error(`Erro ao salvar PDF em ${savePath}:`, error);
+        }
+    } catch (error) {
+        console.error(`Erro ao processar o link ${result}:`, error);
+    }
+}
         // Salva os resultados no requestData
         (request.userData as CrawlData).results = results;
         console.log('Resultados salvos em requestData');

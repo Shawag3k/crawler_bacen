@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 )
 
 func main() {
@@ -66,20 +65,6 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		log.Println("Resposta deserializada do crawler:", responseMap)
-
-		var savedFiles []string
-		if pdfs, ok := responseMap["pdfs_gerados"].([]interface{}); ok {
-			for _, pdf := range pdfs {
-				if pdfName, ok := pdf.(string); ok {
-					savedFiles = append(savedFiles, filepath.Base(pdfName))
-				}
-			}
-		}
-
-		responseMap["pdfs_gerados"] = savedFiles
-		log.Println("Arquivos PDF gerados:", savedFiles)
 
 		w.Header().Set("Content-Type", "application/json")
 		responseJSON, err := json.Marshal(responseMap)
