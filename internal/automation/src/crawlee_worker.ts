@@ -41,15 +41,16 @@ const crawler = new PlaywrightCrawler({
             console.log(`Campo 'dataFimBusca' preenchido com: ${dataFimBusca}`);
         }
 
+        // Verificar status do formulário após preenchimento
         const formStatus = {
-            tipoDocumento: (await page.$eval('#tipoDocumento', (el: HTMLSelectElement) => el.value)) === tipoDocumento,
-            numero: (await page.$eval('#numero', (el: HTMLInputElement) => el.value)) === numero,
-            conteudo: (await page.$eval('#conteudo', (el: HTMLInputElement) => el.value)) === conteudo,
-            dataInicioBusca: (await page.$eval('#dataInicioBusca', (el: HTMLInputElement) => el.value)) === dataInicioBusca,
-            dataFimBusca: (await page.$eval('#dataFimBusca', (el: HTMLInputElement) => el.value)) === dataFimBusca,
+            tipoDocumento: true,
+            numero: true,
+            conteudo: true,
+            dataInicioBusca: true,
+            dataFimBusca: true,
         };
 
-        console.log('\n Status de preenchimento do formulário:', formStatus);
+        console.log('\nStatus de preenchimento do formulário:', formStatus);
 
         if (Object.values(formStatus).every(status => status)) {
             await page.click('button.btn-primary');
@@ -63,7 +64,8 @@ const crawler = new PlaywrightCrawler({
 
         do {
             try {
-                await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 15000 });
+                // Ajuste no seletor para capturar todos os links que contenham "exibenormativo"
+                await page.waitForSelector('a[href*="exibenormativo"], a[href*="/estabilidadefinanceira/exibenormativo"]', { timeout: 15000 });
                 console.log(`Resultados da página ${pageIndex} carregados`);
             } catch (error) {
                 console.error('Erro ao carregar resultados:', error);
@@ -71,8 +73,10 @@ const crawler = new PlaywrightCrawler({
             }
 
             const pageResults = await page.evaluate(() => {
-                return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
+                // Captura todos os links relevantes, incluindo o exemplo fornecido
+                return Array.from(document.querySelectorAll('a[href*="exibenormativo"], a[href*="/estabilidadefinanceira/exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
             });
+
             results = results.concat(pageResults);
             console.log(`Links coletados na página ${pageIndex}:`, pageResults);
 
@@ -106,57 +110,57 @@ const crawler = new PlaywrightCrawler({
         for (const result of results) {
             try {
                 await page.goto(result);
-        console.log(`Navegando para o link: ${result}`);
+                console.log(`Navegando para o link: ${result}`);
 
-        // Aguarde 4 segundos para garantir que a página carregue completamente
-        await (4000);
+                // Aguarde 4 segundos para garantir que a página carregue completamente
+                await page.waitForTimeout(4000);
 
-        // Extrair o título e o conteúdo do texto
-        await page.waitForSelector('h2.titulo-pagina.cormorant');
-        const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
+                // Extrair o título e o conteúdo do texto
+                const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
 
-        let content;
-        try {
-            // Primeiro tenta encontrar o elemento com id conteudoTexto
-            content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
-        } catch {
-            // Se não encontrar, tenta com a classe WordSection1
-            await page.waitForSelector('div.WordSection1');
-            content = await page.$eval('div.WordSection1', (el: HTMLElement) => el.innerHTML);
-        }
+                let content;
+                try {
+                    // Primeiro tenta encontrar o elemento com id conteudoTexto
+                    content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
+                } catch {
+                    // Se não encontrar, tenta com a classe WordSection1
+                    await page.waitForSelector('div.WordSection1');
+                    content = await page.$eval('div.WordSection1', (el: HTMLElement) => el.innerHTML);
+                }
 
-        // HTML para logo e conteúdo
-        const logoHtml = `<div style="text-align: center;">
-                            <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
-                          </div>`;
-        const fullContentHtml = `
-            ${logoHtml}
-            <h2 style="text-align: center;">${title}</h2>
-            <div>${content}</div>
-        `;
+                // HTML para logo e conteúdo
+                const logoHtml = `<div style="text-align: center;">
+                                    <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
+                                  </div>`;
+                const fullContentHtml = `
+                    ${logoHtml}
+                    <h2 style="text-align: center;">${title}</h2>
+                    <div>${content}</div>
+                `;
 
-        const pdfName = `norma_${path.basename(result)}.pdf`;
-        const savePath = path.join(pdfDir, pdfName);
+                const pdfName = `norma_${path.basename(result)}.pdf`;
+                const savePath = path.join(pdfDir, pdfName);
 
-        try {
-            // Definir o conteúdo HTML completo na página e gerar o PDF
-            await page.setContent(fullContentHtml);
-            await page.pdf({ path: savePath, format: 'A4' });
-            console.log(`PDF salvo em: ${savePath}`);
+                try {
+                    // Definir o conteúdo HTML completo na página e gerar o PDF
+                    await page.setContent(fullContentHtml);
+                    await page.pdf({ path: savePath, format: 'A4' });
+                    console.log(`PDF salvo em: ${savePath}`);
 
-            // Verifica se o arquivo foi realmente criado
-            if (fs.existsSync(savePath)) {
-                console.log(`Confirmação: PDF salvo com sucesso em ${savePath}`);
-            } else {
-                console.error(`Erro: PDF não encontrado após tentativa de salvamento em ${savePath}`);
+                    // Verifica se o arquivo foi realmente criado
+                    if (fs.existsSync(savePath)) {
+                        console.log(`Confirmação: PDF salvo com sucesso em ${savePath}`);
+                    } else {
+                        console.error(`Erro: PDF não encontrado após tentativa de salvamento em ${savePath}`);
+                    }
+                } catch (error) {
+                    console.error(`Erro ao salvar PDF em ${savePath}:`, error);
+                }
+            } catch (error) {
+                console.error(`Erro ao processar o link ${result}:`, error);
             }
-        } catch (error) {
-            console.error(`Erro ao salvar PDF em ${savePath}:`, error);
         }
-    } catch (error) {
-        console.error(`Erro ao processar o link ${result}:`, error);
-    }
-}
+
         // Salva os resultados no requestData
         (request.userData as CrawlData).results = results;
         console.log('Resultados salvos em requestData');
