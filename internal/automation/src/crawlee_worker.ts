@@ -1,4 +1,5 @@
 import { PlaywrightCrawler } from 'crawlee';
+import { Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
@@ -13,159 +14,111 @@ interface CrawlData {
 
 const crawler = new PlaywrightCrawler({
     headless: true,
-    requestHandler: async ({ page, request, enqueueLinks, log }) => {
+    requestHandlerTimeoutSecs: 180,  // Timeout aumentado para 3 minutos
+    requestHandler: async ({ page, request, log }) => {
         const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData as CrawlData;
 
         await page.goto('https://www.bcb.gov.br/estabilidadefinanceira/buscanormas');
-        console.log('Página carregada');
+        console.log('Página de busca de normas carregada');
 
         // Preencher os campos do formulário
-        if (tipoDocumento) {
-            await page.selectOption('#tipoDocumento', tipoDocumento);
-            console.log(`Campo 'tipoDocumento' preenchido com: ${tipoDocumento}`);
-        }
-        if (numero) {
-            await page.fill('#numero', numero);
-            console.log(`Campo 'numero' preenchido com: ${numero}`);
-        }
-        if (conteudo) {
-            await page.fill('#conteudo', conteudo);
-            console.log(`Campo 'conteudo' preenchido com: ${conteudo}`);
-        }
-        if (dataInicioBusca) {
-            await page.fill('#dataInicioBusca', dataInicioBusca);
-            console.log(`Campo 'dataInicioBusca' preenchido com: ${dataInicioBusca}`);
-        }
-        if (dataFimBusca) {
-            await page.fill('#dataFimBusca', dataFimBusca);
-            console.log(`Campo 'dataFimBusca' preenchido com: ${dataFimBusca}`);
-        }
+        if (tipoDocumento) await page.selectOption('#tipoDocumento', tipoDocumento);
+        if (numero) await page.fill('#numero', numero);
+        if (conteudo) await page.fill('#conteudo', conteudo);
+        if (dataInicioBusca) await page.fill('#dataInicioBusca', dataInicioBusca);
+        if (dataFimBusca) await page.fill('#dataFimBusca', dataFimBusca);
 
-        // Verificar status do formulário após preenchimento
-        const formStatus = {
-            tipoDocumento: true,
-            numero: true,
-            conteudo: true,
-            dataInicioBusca: true,
-            dataFimBusca: true,
-        };
+        // Enviar o formulário
+        await page.click('button.btn-primary');
+        log.info('Formulário enviado com sucesso');
 
-        console.log('\nStatus de preenchimento do formulário:', formStatus);
-
-        if (Object.values(formStatus).every(status => status)) {
-            await page.click('button.btn-primary');
-        } else {
-            console.error('Erro ao preencher o formulário:', formStatus);
-            return;
-        }
-
-        let results: string[] = [];
         let pageIndex = 1;
+        let hasNextPage = true;
 
-        do {
-            try {
-                // Ajuste no seletor para capturar todos os links que contenham "exibenormativo"
-                await page.waitForSelector('a[href*="exibenormativo"], a[href*="/estabilidadefinanceira/exibenormativo"]', { timeout: 15000 });
-                console.log(`Resultados da página ${pageIndex} carregados`);
-            } catch (error) {
-                console.error('Erro ao carregar resultados:', error);
-                return;
-            }
-
-            const pageResults = await page.evaluate(() => {
-                // Captura todos os links relevantes, incluindo o exemplo fornecido
-                return Array.from(document.querySelectorAll('a[href*="exibenormativo"], a[href*="/estabilidadefinanceira/exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
+        while (hasNextPage) {
+            log.info(`Processando a página ${pageIndex}`);
+            
+            // Aguardar a página carregar e coletar os links
+            await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 15000 });
+            const pageResults: string[] = await page.evaluate(() => {
+                return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
             });
 
-            results = results.concat(pageResults);
-            console.log(`Links coletados na página ${pageIndex}:`, pageResults);
+            log.info(`Links coletados na página ${pageIndex}:`, pageResults);
 
-            // Verificar e clicar no botão de próxima página
-            const nextPageExists = await page.evaluate(() => {
-                const nextButton = document.querySelector('li.page-item:not(.disabled) a[aria-label="Próximo"]');
-                if (nextButton) {
-                    (nextButton as HTMLAnchorElement).click();
+            // Gerar PDFs dos links coletados
+            await generatePDFsFromLinks(page, pageResults);
+
+            // Tentar navegar para a próxima página, se disponível
+            hasNextPage = await page.evaluate(() => {
+                const nextPageButton = document.querySelector('a.page-link[aria-label="Próxima"]');
+                if (nextPageButton && !nextPageButton.closest('li.page-item.disabled')) {
+                    (nextPageButton as HTMLAnchorElement).click();
                     return true;
                 }
                 return false;
             });
 
-            if (nextPageExists) {
-                console.log(`Navegando para a próxima página: ${pageIndex + 1}`);
-                await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+            if (hasNextPage) {
                 pageIndex++;
+                log.info(`Navegando para a página ${pageIndex}`);
+                await page.waitForTimeout(5000); // Pausa para garantir que a página carregue
+                await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
             } else {
-                console.log('Nenhuma página adicional encontrada ou fim dos resultados alcançado.');
-                break;
-            }
-        } while (true);
-
-        // Criar diretório para PDFs se não existir
-        const pdfDir = path.resolve(__dirname, 'pdf_normas');
-        if (!fs.existsSync(pdfDir)) {
-            fs.mkdirSync(pdfDir, { recursive: true });
-            console.log('Diretório pdf_normas criado');
-        }
-
-        for (const result of results) {
-            try {
-                await page.goto(result);
-                console.log(`Navegando para o link: ${result}`);
-
-                // Aguarde 4 segundos para garantir que a página carregue completamente
-                await page.waitForTimeout(4000);
-
-                // Extrair o título e o conteúdo do texto
-                const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
-
-                let content;
-                try {
-                    // Primeiro tenta encontrar o elemento com id conteudoTexto
-                    content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
-                } catch {
-                    // Se não encontrar, tenta com a classe WordSection1
-                    await page.waitForSelector('div.WordSection1');
-                    content = await page.$eval('div.WordSection1', (el: HTMLElement) => el.innerHTML);
-                }
-
-                // HTML para logo e conteúdo
-                const logoHtml = `<div style="text-align: center;">
-                                    <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
-                                  </div>`;
-                const fullContentHtml = `
-                    ${logoHtml}
-                    <h2 style="text-align: center;">${title}</h2>
-                    <div>${content}</div>
-                `;
-
-                const pdfName = `norma_${path.basename(result)}.pdf`;
-                const savePath = path.join(pdfDir, pdfName);
-
-                try {
-                    // Definir o conteúdo HTML completo na página e gerar o PDF
-                    await page.setContent(fullContentHtml);
-                    await page.pdf({ path: savePath, format: 'A4' });
-                    console.log(`PDF salvo em: ${savePath}`);
-
-                    // Verifica se o arquivo foi realmente criado
-                    if (fs.existsSync(savePath)) {
-                        console.log(`Confirmação: PDF salvo com sucesso em ${savePath}`);
-                    } else {
-                        console.error(`Erro: PDF não encontrado após tentativa de salvamento em ${savePath}`);
-                    }
-                } catch (error) {
-                    console.error(`Erro ao salvar PDF em ${savePath}:`, error);
-                }
-            } catch (error) {
-                console.error(`Erro ao processar o link ${result}:`, error);
+                log.info('Nenhuma página adicional encontrada ou fim dos resultados alcançado.');
             }
         }
-
-        // Salva os resultados no requestData
-        (request.userData as CrawlData).results = results;
-        console.log('Resultados salvos em requestData');
     },
 });
+
+async function generatePDFsFromLinks(page: Page, links: string[]) {
+    const pdfDir = path.resolve(__dirname, 'pdf_normas');
+    if (!fs.existsSync(pdfDir)) {
+        fs.mkdirSync(pdfDir, { recursive: true });
+        console.log('Diretório pdf_normas criado');
+    }
+
+    for (const link of links) {
+        try {
+            await page.goto(link);
+            console.log(`Navegando para o link: ${link}`);
+
+            await page.waitForTimeout(4000);
+
+            const title = await page.$eval('h2.titulo-pagina.cormorant', (el: HTMLElement) => el.textContent?.trim() || 'Sem Título');
+
+            let content;
+            try {
+                content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
+            } catch {
+                await page.waitForSelector('div.WordSection1');
+                content = await page.$eval('div.WordSection1', (el: HTMLElement) => el.innerHTML);
+            }
+
+            const logoHtml = `<div style="text-align: center;">
+                                <img src="https://www.bcb.gov.br/assets/svg/logo-bcb.svg" width="126" alt="Banco Central do Brasil">
+                              </div>`;
+            const fullContentHtml = `
+                ${logoHtml}
+                <h2 style="text-align: center;">${title}</h2>
+                <div>${content}</div>
+            `;
+
+            const pdfName = `norma_${path.basename(link)}.pdf`;
+            const savePath = path.join(pdfDir, pdfName);
+
+            try {
+                await page.setContent(fullContentHtml);
+                await page.pdf({ path: savePath, format: 'A4' });
+                console.log(`PDF salvo em: ${savePath}`);
+            } catch (error) {
+                console.error(`Erro ao salvar PDF em ${savePath}:`, error);
+            }
+        } catch (error) {
+            console.error(`Erro ao processar o link ${link}:`, error);
+        }
+    }
+}
 
 const startCrawler = async (data: CrawlData) => {
     console.log('Iniciando o crawler com os dados:', data);
@@ -176,9 +129,8 @@ const startCrawler = async (data: CrawlData) => {
 
     await crawler.run(requestData);
 
-    // Saída JSON limpa dos resultados
     const resultsJson = JSON.stringify(requestData[0].userData.results);
-    console.log('Resultados JSON:', resultsJson); // Certifique-se de que este seja o único output final
+    console.log('Resultados JSON:', resultsJson);
     return requestData[0].userData.results;
 };
 

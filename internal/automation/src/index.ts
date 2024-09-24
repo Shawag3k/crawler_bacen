@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import startCrawler from './crawlee_worker';
+import startCrawler from './crawlee_worker'; // Certifique-se de que o caminho está correto
 
 const app = express();
 const port = 3000;
