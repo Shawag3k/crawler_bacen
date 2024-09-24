@@ -33,6 +33,7 @@ const crawler = new PlaywrightCrawler({
         log.info('Formulário enviado com sucesso');
 
         let pageIndex = 1;
+        let previousPageIndex = 0;
         let hasNextPage = true;
 
         while (hasNextPage) {
@@ -53,15 +54,34 @@ const crawler = new PlaywrightCrawler({
             hasNextPage = await page.evaluate(() => {
                 const nextPageButton = document.querySelector('a.page-link[aria-label="Próxima"]');
                 if (nextPageButton && !nextPageButton.closest('li.page-item.disabled')) {
-                    (nextPageButton as HTMLAnchorElement).click();
                     return true;
                 }
                 return false;
             });
 
             if (hasNextPage) {
+                // Se não estamos na primeira página, voltar uma página antes de avançar
+                if (pageIndex > 1) {
+                    log.info(`Voltando para a página ${previousPageIndex}`);
+                    await page.evaluate((previousPageIndex) => {
+                        const previousPageButton = document.querySelectorAll('a.page-link')[previousPageIndex - 1] as HTMLElement;
+                        previousPageButton.click();
+                    }, previousPageIndex);
+
+                    await page.waitForTimeout(5000); // Pausa para garantir que a página carregue
+                    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+                }
+
+                // Atualizar índices e avançar para a próxima página
+                previousPageIndex = pageIndex;
                 pageIndex++;
+
                 log.info(`Navegando para a página ${pageIndex}`);
+                await page.evaluate((pageIndex) => {
+                    const nextPageButton = document.querySelectorAll('a.page-link')[pageIndex - 1] as HTMLElement;
+                    nextPageButton.click();
+                }, pageIndex);
+
                 await page.waitForTimeout(5000); // Pausa para garantir que a página carregue
                 await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
             } else {
