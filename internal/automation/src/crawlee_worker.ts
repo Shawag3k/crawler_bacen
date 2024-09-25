@@ -18,6 +18,7 @@ const crawler = new PlaywrightCrawler({
     requestHandler: async ({ page, request, log }) => {
         const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData as CrawlData;
 
+        // Navegar para a página de busca de normas
         await page.goto('https://www.bcb.gov.br/estabilidadefinanceira/buscanormas');
         console.log('Página de busca de normas carregada');
 
@@ -33,64 +34,68 @@ const crawler = new PlaywrightCrawler({
         log.info('Formulário enviado com sucesso');
 
         let pageIndex = 1;
-        let previousPageIndex = 0;
         let hasNextPage = true;
+        const allPageLinks: string[] = [];  // Coletar links de todas as páginas
 
+        // Função para aguardar o carregamento completo da página
+        async function waitForPageLoad() {
+            await page.waitForSelector('ul.pagination', { timeout: 5000 });
+            console.log('Página carregada. Aguardando 5 segundos...');
+            await page.waitForTimeout(5000);
+        }
+
+        // Função para verificar se estamos na página de resultados
+        async function isOnResultsPage(): Promise<boolean> {
+            const currentUrl = page.url();
+            return currentUrl.includes('buscanormas');
+        }
+
+        // Loop para navegar pelas páginas e coletar os links
         while (hasNextPage) {
             log.info(`Processando a página ${pageIndex}`);
-            
-            // Aguardar a página carregar e coletar os links
+
+            // Verificar se estamos na página de resultados
+            if (!(await isOnResultsPage())) {
+                console.log('Não estamos na página de resultados, retornando...');
+                await page.goBack();
+                await waitForPageLoad();
+            }
+
+            // Coletar os links da página de resultados
             await page.waitForSelector('a[href*="exibenormativo"]', { timeout: 15000 });
             const pageResults: string[] = await page.evaluate(() => {
                 return Array.from(document.querySelectorAll('a[href*="exibenormativo"]')).map(item => (item as HTMLAnchorElement).href);
             });
 
+            allPageLinks.push(...pageResults);  // Adiciona os links da página atual à lista geral
             log.info(`Links coletados na página ${pageIndex}:`, pageResults);
 
-            // Gerar PDFs dos links coletados
-            await generatePDFsFromLinks(page, pageResults);
-
-            // Tentar navegar para a próxima página, se disponível
+            // Verificar a presença do botão "Próxima"
             hasNextPage = await page.evaluate(() => {
                 const nextPageButton = document.querySelector('a.page-link[aria-label="Próxima"]');
-                if (nextPageButton && !nextPageButton.closest('li.page-item.disabled')) {
-                    return true;
-                }
-                return false;
+                return !!(nextPageButton && !nextPageButton.closest('li.page-item.disabled'));
             });
 
             if (hasNextPage) {
-                // Se não estamos na primeira página, voltar uma página antes de avançar
-                if (pageIndex > 1) {
-                    log.info(`Voltando para a página ${previousPageIndex}`);
-                    await page.evaluate((previousPageIndex) => {
-                        const previousPageButton = document.querySelectorAll('a.page-link')[previousPageIndex - 1] as HTMLElement;
-                        previousPageButton.click();
-                    }, previousPageIndex);
-
-                    await page.waitForTimeout(5000); // Pausa para garantir que a página carregue
-                    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
-                }
-
-                // Atualizar índices e avançar para a próxima página
-                previousPageIndex = pageIndex;
-                pageIndex++;
-
-                log.info(`Navegando para a página ${pageIndex}`);
-                await page.evaluate((pageIndex) => {
-                    const nextPageButton = document.querySelectorAll('a.page-link')[pageIndex - 1] as HTMLElement;
+                log.info(`Navegando para a próxima página (${pageIndex + 1})`);
+                await page.evaluate(() => {
+                    const nextPageButton = document.querySelector('a.page-link[aria-label="Próxima"]') as HTMLElement;
                     nextPageButton.click();
-                }, pageIndex);
+                });
 
-                await page.waitForTimeout(5000); // Pausa para garantir que a página carregue
-                await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+                await waitForPageLoad();  // Esperar o carregamento da nova página
+                pageIndex++;
             } else {
                 log.info('Nenhuma página adicional encontrada ou fim dos resultados alcançado.');
             }
         }
+
+        // Após coletar todos os links, gerar os PDFs
+        await generatePDFsFromLinks(page, allPageLinks);
     },
 });
 
+// Função para gerar PDFs dos links coletados
 async function generatePDFsFromLinks(page: Page, links: string[]) {
     const pdfDir = path.resolve(__dirname, 'pdf_normas');
     if (!fs.existsSync(pdfDir)) {
@@ -138,8 +143,12 @@ async function generatePDFsFromLinks(page: Page, links: string[]) {
             console.error(`Erro ao processar o link ${link}:`, error);
         }
     }
+
+    console.log('Todos os PDFs foram gerados. Encerrando o processo.');
+    process.exit(0);  // Encerra o programa quando todos os PDFs forem gerados
 }
 
+// Função principal para iniciar o crawler
 const startCrawler = async (data: CrawlData) => {
     console.log('Iniciando o crawler com os dados:', data);
     const requestData = [{
