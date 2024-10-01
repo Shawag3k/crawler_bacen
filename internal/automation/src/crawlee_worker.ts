@@ -14,7 +14,7 @@ interface CrawlData {
 
 const crawler = new PlaywrightCrawler({
     headless: true,
-    requestHandlerTimeoutSecs: 180,  // Timeout aumentado para 3 minutos
+    requestHandlerTimeoutSecs: 5400,  
     requestHandler: async ({ page, request, log }) => {
         const { tipoDocumento, numero, conteudo, dataInicioBusca, dataFimBusca } = request.userData as CrawlData;
 
@@ -116,7 +116,8 @@ async function generatePDFsFromLinks(page: Page, links: string[]) {
             try {
                 content = await page.$eval('div#conteudoTexto', (el: HTMLElement) => el.innerHTML);
             } catch {
-                await page.waitForSelector('div.WordSection1');
+                // Reduzindo o timeout para 10 segundos
+                await page.waitForSelector('div.WordSection1', { timeout: 10000 });
                 content = await page.$eval('div.WordSection1', (el: HTMLElement) => el.innerHTML);
             }
 
@@ -145,7 +146,6 @@ async function generatePDFsFromLinks(page: Page, links: string[]) {
     }
 
     console.log('Todos os PDFs foram gerados. Encerrando o processo.');
-    process.exit(0);  // Encerra o programa quando todos os PDFs forem gerados
 }
 
 // Função principal para iniciar o crawler
