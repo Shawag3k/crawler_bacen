@@ -95,9 +95,10 @@ const crawler = new PlaywrightCrawler({
     },
 });
 
-// Função para gerar PDFs dos links coletados
 async function generatePDFsFromLinks(page: Page, links: string[]) {
-    const pdfDir = path.resolve(__dirname, 'pdf_normas');
+    // Defina o caminho absoluto para a pasta "pdf_normas" com base na localização atual do código
+    const pdfDir = path.resolve(__dirname, '../internal/pdf_normas');
+    
     if (!fs.existsSync(pdfDir)) {
         fs.mkdirSync(pdfDir, { recursive: true });
         console.log('Diretório pdf_normas criado');
@@ -147,6 +148,7 @@ async function generatePDFsFromLinks(page: Page, links: string[]) {
 
     console.log('Todos os PDFs foram gerados. Encerrando o processo.');
 }
+
 
 // Função principal para iniciar o crawler
 const startCrawler = async (data: CrawlData) => {

@@ -10,7 +10,8 @@ services:
     environment:
       - PORT=8080
     volumes:
-      - /home/barbosa/crawler_bacen/internal/pdf_normas:/app/build/pdf_normas
+      # Usando ${PWD} para referenciar o caminho relativo ao diretório atual
+      - ${PWD}/internal/pdf_normas:/app/internal/pdf_normas
     depends_on:
       - typescript_crawler
 
@@ -21,4 +22,5 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - /home/barbosa/crawler_bacen/internal/pdf_normas:/app/build/pdf_normas
+      # Usando ${PWD} para referenciar o caminho relativo ao diretório atual
+      - ${PWD}/internal/pdf_normas:/app/internal/pdf_normas
